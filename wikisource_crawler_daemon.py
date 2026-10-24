@@ -6,6 +6,7 @@ import signal
 import sys
 import time
 import urllib.parse
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 import requests
@@ -37,6 +38,11 @@ logging.basicConfig(
 STATE_FILE = "crawler_state.json"
 CONFIG_FILE = "parameters.yml"
 SHUTDOWN_REQUESTED = False
+
+
+def cm_to_pt(cm_value: float) -> float:
+    """Convert centimetres to points for Google Docs style values."""
+    return float(cm_value) * 28.3464567
 
 
 def handle_shutdown(signum, frame):
@@ -175,7 +181,7 @@ class LocalAksharamukhaEngine:
     def process(self, text: str) -> str:
         if not text or not text.strip():
             return ""
-        return transliterate.process(
+        result = transliterate.process(
             src=self.src,
             tgt=self.tgt,
             txt=text,
@@ -183,6 +189,7 @@ class LocalAksharamukhaEngine:
             pre_options=self.pre_options,
             post_options=self.post_options,
         )
+        return result if isinstance(result, str) else str(result or "")
 
 
 class GoogleDocsManager:
@@ -202,12 +209,37 @@ class GoogleDocsManager:
                 token.write(creds.to_json())
 
         self.service = build("docs", "v1", credentials=creds, static_discovery=False)
+        self.drive_service = build("drive", "v3", credentials=creds, static_discovery=False)
 
-    def create_document(self, title: str, doc_settings: Dict[str, Any]) -> str:
+    def create_folder(self, name: str) -> str:
+        """Creates a Google Drive folder and returns its ID."""
+        folder = self.drive_service.files().create(
+            body={"name": name, "mimeType": "application/vnd.google-apps.folder"},
+            fields="id",
+        ).execute()
+        folder_id = folder["id"]
+        logging.info(f"Created Google Drive folder: '{name}' (ID: {folder_id})")
+        return folder_id
+
+    def create_document(
+        self, title: str, doc_settings: Dict[str, Any], parent_folder_id: str
+    ) -> str:
         """Creates a document and applies configured margins and column properties."""
         doc = self.service.documents().create(body={"title": title}).execute()
         doc_id = doc.get("documentId")
         logging.info(f"Created Document: '{title}' (ID: {doc_id})")
+
+        parents = self.drive_service.files().get(
+            fileId=doc_id, fields="parents"
+        ).execute().get("parents", [])
+        move_args = {
+            "fileId": doc_id,
+            "addParents": parent_folder_id,
+            "fields": "id,parents",
+        }
+        if parents:
+            move_args["removeParents"] = ",".join(parents)
+        self.drive_service.files().update(**move_args).execute()
 
         self.apply_document_layout(doc_id, doc_settings)
         return doc_id
@@ -240,7 +272,7 @@ class GoogleDocsManager:
         if enable_columns:
             spacing_pt = cm_to_pt(doc_settings.get("column_spacing_cm", 0.5))
             separator_style = (
-                "SOLID_BETWEEN_COLUMNS"
+                "BETWEEN_EACH_COLUMN"
                 if doc_settings.get("line_between_columns", True)
                 else "NONE"
             )
@@ -575,9 +607,11 @@ def identify_volume_for_page(page_title: str, breadcrumbs: List[str], volume_gro
         patterns = group.get("patterns", [])
         for pat in patterns:
             if pat in search_target:
+                group_id = str(group.get("id") or "vol_general")
+                title_suffix = str(group.get("title_suffix") or group_id)
                 return {
-                    "id": group.get("id"),
-                    "title_suffix": group.get("title_suffix", group.get("id")),
+                    "id": group_id,
+                    "title_suffix": title_suffix,
                 }
 
     return {
@@ -592,9 +626,13 @@ def run_pipeline():
     cfg = ConfigManager.load_config()
     wikisource_url = cfg["wikisource_url"]
     output_doc_name = cfg["output_doc_name"]
+    doc_settings = cfg["document_settings"]
     t_params = cfg["transliterate_params"]
     volume_groups = cfg["volume_groups"]
     c_settings = cfg["crawler_settings"]
+
+    font_size = doc_settings.get("font_size", 12)
+    include_url = doc_settings.get("include_referred_url", True)
 
     req_delay = c_settings["request_delay_seconds"]
     batch_size = c_settings["batch_size"]
@@ -627,9 +665,10 @@ def run_pipeline():
         f"Status: Total: {len(all_leaf_pages)} | Completed: {len(processed_pages)} | Remaining: {len(pending_pages)}"
     )
 
-    # Buffers categorized by volume ID: {vol_id: "buffered text"}
-    volume_buffers: Dict[str, str] = {}
+    # Buffers categorized by volume ID: {vol_id: [section_data, ...]}
+    volume_buffers: Dict[str, List[Dict[str, Any]]] = {}
     batch_counter = 0
+    run_folder_id = None
 
     for i, page_title in enumerate(pending_pages, 1):
         if SHUTDOWN_REQUESTED:
@@ -645,7 +684,15 @@ def run_pipeline():
 
             if vol_id not in volume_docs:
                 vol_doc_title = f"{base_title} - {vol_info['title_suffix']}"
-                new_doc_id = docs_mgr.create_document(vol_doc_title, doc_settings=doc_settings)
+                if run_folder_id is None:
+                    timestamp = datetime.now().strftime("%Y%m%d-%H%M")
+                    run_folder_name = f"{base_title} - {timestamp}"
+                    run_folder_id = docs_mgr.create_folder(run_folder_name)
+                new_doc_id = docs_mgr.create_document(
+                    vol_doc_title,
+                    doc_settings=doc_settings,
+                    parent_folder_id=run_folder_id,
+                )
                 volume_docs[vol_id] = new_doc_id
 
                 header = f"{kn_root}\n"
