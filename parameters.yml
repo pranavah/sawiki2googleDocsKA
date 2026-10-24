@@ -1,0 +1,87 @@
+# ==========================================
+# Wikisource & Google Docs Pipeline Settings
+# ==========================================
+
+wikisource_url: "https://sa.wikisource.org/wiki/%E0%A4%A6%E0%A5%87%E0%A4%B5%E0%A5%80%E0%A4%AD%E0%A4%BE%E0%A4%97%E0%A4%B5%E0%A4%A4%E0%A4%AA%E0%A5%81%E0%A4%B0%E0%A4%BE%E0%A4%A3%E0%A4%AE%E0%A5%8D"
+
+output_doc_name: "ಶ್ರೀ ದೇವಿಭಾಗವತಪುರಾಣಮ್ (ಕನ್ನಡ ಲಿಪಿ)"
+
+# Document layout and styling options
+document_settings:
+  font_size: 12                # Default font size in pt
+  include_referred_url: true   # Include source links from Wikisource
+
+  # Column settings
+  enable_columns: true         # Set true for 2 columns, false for single column
+  column_spacing_cm: 0.5       # Spacing between columns in centimeters
+  line_between_columns: true   # Draw vertical separator line between columns
+
+  # Margins (in centimeters)
+  margins:
+    margin_left_cm: 1.5        # Default 1.5 cm
+    margin_right_cm: 1.5       # Default 1.5 cm
+    margin_top_cm: 1.5
+    margin_bottom_cm: 1.5
+
+# Aksharamukha transliteration parameters
+transliterate_params:
+  src: "Devanagari"
+  tgt: "Kannada"
+  nativize: true
+  pre_options: []
+  post_options:
+    - "Dot2Dandas"
+    - "KannadaNakaraPollu"
+    - "PreserveSource"
+
+# Structural Volume Grouping (Skandhas / Parvas)
+volume_groups:
+  - id: "vol_mahatmyam"
+    title_suffix: "ಮಾಹಾತ್ಮ್ಯಮ್ (Māhātmyam)"
+    patterns:
+      - "माहात्म्य"
+      - "माहात्म्यम्"
+
+  - id: "vol_skandha_1_to_3"
+    title_suffix: "ಸ್ಕಂಧಗಳು ೧ ರಿಂದ ೩ (Skandhas 1 to 3)"
+    patterns:
+      - "स्कन्धः ०१"
+      - "स्कन्धः ०२"
+      - "स्कन्धः ०३"
+      - "स्कन्धः १"
+      - "स्कन्धः २"
+      - "स्कन्धः ३"
+
+  - id: "vol_skandha_4_to_6"
+    title_suffix: "ಸ್ಕಂಧಗಳು ೪ ರಿಂದ ೬ (Skandhas 4 to 6)"
+    patterns:
+      - "स्कन्धः ०४"
+      - "स्कन्धः ०५"
+      - "स्कन्धः ०६"
+      - "स्कन्धः ४"
+      - "स्कन्धः ५"
+      - "स्कन्धः ६"
+
+  - id: "vol_skandha_7_to_9"
+    title_suffix: "ಸ್ಕಂಧಗಳು ೭ ರಿಂದ ೯ (Skandhas 7 to 9)"
+    patterns:
+      - "स्कन्धः ०७"
+      - "स्कन्धः ०८"
+      - "स्कन्धः ०९"
+      - "स्कन्धः ७"
+      - "स्कन्धः ८"
+      - "स्कन्धः ९"
+
+  - id: "vol_skandha_10_to_12"
+    title_suffix: "ಸ್ಕಂಧಗಳು ೧೦ ರಿಂದ ೧೨ (Skandhas 10 to 12)"
+    patterns:
+      - "स्कन्धः १०"
+      - "स्कन्धः ११"
+      - "स्कन्धः १२"
+
+# Crawler rate limiting and cooling configuration
+crawler_settings:
+  request_delay_seconds: 3.0
+  batch_size: 10
+  batch_cooldown_seconds: 30.0
+  max_pages: null
