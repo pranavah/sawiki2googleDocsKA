@@ -39,6 +39,11 @@ CONFIG_FILE = "parameters.yml"
 SHUTDOWN_REQUESTED = False
 
 
+def cm_to_pt(cm_value: float) -> float:
+    """Convert centimetres to points for Google Docs style values."""
+    return float(cm_value) * 28.3464567
+
+
 def handle_shutdown(signum, frame):
     global SHUTDOWN_REQUESTED
     logging.info("Shutdown signal received. Exiting safely after the current item...")
@@ -175,7 +180,7 @@ class LocalAksharamukhaEngine:
     def process(self, text: str) -> str:
         if not text or not text.strip():
             return ""
-        return transliterate.process(
+        result = transliterate.process(
             src=self.src,
             tgt=self.tgt,
             txt=text,
@@ -183,6 +188,7 @@ class LocalAksharamukhaEngine:
             pre_options=self.pre_options,
             post_options=self.post_options,
         )
+        return result if isinstance(result, str) else str(result or "")
 
 
 class GoogleDocsManager:
@@ -240,7 +246,7 @@ class GoogleDocsManager:
         if enable_columns:
             spacing_pt = cm_to_pt(doc_settings.get("column_spacing_cm", 0.5))
             separator_style = (
-                "SOLID_BETWEEN_COLUMNS"
+                "BETWEEN_EACH_COLUMN"
                 if doc_settings.get("line_between_columns", True)
                 else "NONE"
             )
@@ -575,9 +581,11 @@ def identify_volume_for_page(page_title: str, breadcrumbs: List[str], volume_gro
         patterns = group.get("patterns", [])
         for pat in patterns:
             if pat in search_target:
+                group_id = str(group.get("id") or "vol_general")
+                title_suffix = str(group.get("title_suffix") or group_id)
                 return {
-                    "id": group.get("id"),
-                    "title_suffix": group.get("title_suffix", group.get("id")),
+                    "id": group_id,
+                    "title_suffix": title_suffix,
                 }
 
     return {
@@ -592,9 +600,13 @@ def run_pipeline():
     cfg = ConfigManager.load_config()
     wikisource_url = cfg["wikisource_url"]
     output_doc_name = cfg["output_doc_name"]
+    doc_settings = cfg["document_settings"]
     t_params = cfg["transliterate_params"]
     volume_groups = cfg["volume_groups"]
     c_settings = cfg["crawler_settings"]
+
+    font_size = doc_settings.get("font_size", 12)
+    include_url = doc_settings.get("include_referred_url", True)
 
     req_delay = c_settings["request_delay_seconds"]
     batch_size = c_settings["batch_size"]
@@ -627,8 +639,8 @@ def run_pipeline():
         f"Status: Total: {len(all_leaf_pages)} | Completed: {len(processed_pages)} | Remaining: {len(pending_pages)}"
     )
 
-    # Buffers categorized by volume ID: {vol_id: "buffered text"}
-    volume_buffers: Dict[str, str] = {}
+    # Buffers categorized by volume ID: {vol_id: [section_data, ...]}
+    volume_buffers: Dict[str, List[Dict[str, Any]]] = {}
     batch_counter = 0
 
     for i, page_title in enumerate(pending_pages, 1):

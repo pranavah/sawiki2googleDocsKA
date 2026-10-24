@@ -9,7 +9,7 @@ output_doc_name: "ಶ್ರೀ ದೇವಿಭಾಗವತಪುರಾಣಮ್ 
 # Document layout and styling options
 document_settings:
   font_size: 12                # Default font size in pt
-  include_referred_url: true   # Include source links from Wikisource
+  include_referred_url: false   # Include source links from Wikisource
 
   # Column settings
   enable_columns: true         # Set true for 2 columns, false for single column
