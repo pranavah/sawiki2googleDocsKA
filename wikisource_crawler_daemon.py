@@ -16,6 +16,7 @@ from urllib3.util import Retry
 from bs4 import BeautifulSoup
 from aksharamukha import transliterate
 
+from google.auth.exceptions import RefreshError
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -199,12 +200,44 @@ class GoogleDocsManager:
         creds = None
         if os.path.exists(token_path):
             creds = Credentials.from_authorized_user_file(token_path, SCOPES)
-        if not creds or not creds.valid:
-            if creds and creds.expired and creds.refresh_token:
+        if creds and not creds.valid and creds.expired and creds.refresh_token:
+            try:
                 creds.refresh(Request())
-            else:
-                flow = InstalledAppFlow.from_client_secrets_file(credentials_path, SCOPES)
-                creds = flow.run_local_server(port=0)
+                with open(token_path, "w", encoding="utf-8") as token:
+                    token.write(creds.to_json())
+            except RefreshError as error:
+                logging.warning(
+                    "Saved Google authorization could not be refreshed; "
+                    "starting a new Google sign-in: %s",
+                    error,
+                )
+                creds = None
+
+        if not creds or not creds.valid:
+            if not os.path.isfile(credentials_path):
+                print(
+                    "\nGoogle sign-in needs an OAuth desktop-app credentials file.\n"
+                    "1. In Google Cloud Console, enable the Google Docs API and "
+                    "Google Drive API.\n"
+                    "2. Create an OAuth client ID with application type "
+                    "'Desktop app' and download its JSON file.\n"
+                    f"3. Save the file as '{credentials_path}' in this folder."
+                )
+                if sys.stdin.isatty():
+                    input("After saving the file, press Enter to continue...")
+                if not os.path.isfile(credentials_path):
+                    raise FileNotFoundError(
+                        f"Google OAuth credentials not found: {credentials_path}. "
+                        "Download a Desktop app OAuth client JSON from Google "
+                        "Cloud Console and save it in the project folder."
+                    )
+
+            logging.info(
+                "Google sign-in is required. A browser window will open; "
+                "sign in and approve access to create Google Docs and Drive folders."
+            )
+            flow = InstalledAppFlow.from_client_secrets_file(credentials_path, SCOPES)
+            creds = flow.run_local_server(port=0, open_browser=True)
             with open(token_path, "w") as token:
                 token.write(creds.to_json())
 
@@ -647,15 +680,15 @@ def run_pipeline():
     volume_docs: Dict[str, str] = state.get("volume_docs", {})
     processed_pages: List[str] = state.get("processed_pages", [])
 
+    docs_mgr = GoogleDocsManager()
     crawler = MediaWikiTreeCrawler(root_title)
     all_leaf_pages = crawler.build_traversal_list()
 
     if max_pages:
         logging.info(f"Limiting execution to {max_pages} pages as requested.")
         all_leaf_pages = all_leaf_pages[:max_pages]
-
+   
     engine = LocalAksharamukhaEngine(t_params)
-    docs_mgr = GoogleDocsManager()
 
     kn_root = engine.process(root_title)
     base_title = output_doc_name if output_doc_name else f"{kn_root}"

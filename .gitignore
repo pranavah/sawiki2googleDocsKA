@@ -2,3 +2,6 @@ credentials.json
 parameters.yml_old
 pipeline_runner.log
 token.json
+crawler_state.json
+.venv/
+__pycache__/
