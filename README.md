@@ -27,11 +27,18 @@ stored in `crawler_state.json`, allowing already-created volume documents and
 processed pages to be reused on a later run.
 
 ## Setup and execution
+<<<<<<< HEAD
 Install Python and ensure the `python` command is available on your Windows
 `PATH`.
 
 Install Python 3. On Linux, also ensure Bash is available.
 
+=======
+
+Install Python and ensure the `python` command is available on your Windows
+`PATH`.
+
+>>>>>>> 5ba57ef9bc0a65858a01cd663693498cdea3d494
 ### Google account setup (first run)
 
 The first run needs an OAuth client configuration from your own Google Cloud
